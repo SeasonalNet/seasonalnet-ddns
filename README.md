@@ -1,6 +1,6 @@
-# SeasonalNet Cloudflare DDNS
+# seasonalnet-ddns
 
-`seasonal-cf-ddns` is the SeasonalNet Cloudflare dynamic DNS daemon.
+`seasonalnet-ddns` is the SeasonalNet Cloudflare dynamic DNS daemon.
 
 It keeps selected public `seasonalnet.org` DNS records pointed at the current SeasonalNet WAN IPv4 address. It replaces the older Bash/systemd-timer implementation with a small Node.js service that runs continuously under systemd.
 
