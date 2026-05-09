@@ -1,0 +1,71 @@
+cloudflare:
+  zone_name: seasonalnet.org
+  api_token_env: CF_API_TOKEN
+
+wan_ip:
+  command: "curl -fsS https://api.ipify.org"
+  interval_seconds: 600
+
+records:
+  - name: pbx.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: status.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: www.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: radio.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: git.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: prov.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: auth.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: admin.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: cdn.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: docs.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: webmail.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: grafana.seasonalnet.org
+    type: A
+    proxied: true
+
+  - name: sip.seasonalnet.org
+    type: A
+    proxied: false
+
+conflict_policy:
+  non_matching_type: skip
+  multiple_records: fail-record
+
+logging:
+  level: info

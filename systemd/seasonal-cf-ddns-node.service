@@ -1,0 +1,23 @@
+[Unit]
+Description=SeasonalNet Cloudflare DDNS daemon
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/seasonalnet/seasonalnet-ddns
+EnvironmentFile=/etc/seasonal/cf-ddns.env
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=15
+User=cfddns
+Group=cfddns
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/seasonalnet/seasonalnet-ddns
+
+[Install]
+WantedBy=multi-user.target
