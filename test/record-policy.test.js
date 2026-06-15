@@ -42,3 +42,14 @@ test('builds proxied patch when proxy policy changes', () => {
   const desired = { content: '192.0.2.1', proxied: false };
   assert.deepEqual(buildPatch(existing, desired), { proxied: false });
 });
+
+test('classifies AAAA records independently from A records with the same name', () => {
+  const aaaa = { id: '6', type: 'AAAA', content: '2001:db8::10', proxied: true };
+  const result = classifyRecords([
+    { id: '4', type: 'A', content: '203.0.113.10', proxied: true },
+    aaaa,
+  ], 'AAAA');
+
+  assert.equal(result.action, 'update');
+  assert.equal(result.record, aaaa);
+});

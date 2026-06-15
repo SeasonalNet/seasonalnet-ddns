@@ -1,6 +1,6 @@
 {
   "name": "seasonal-cf-ddns",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SeasonalNet Cloudflare DDNS daemon",
   "private": true,
   "license": "UNLICENSED",

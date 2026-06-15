@@ -5,7 +5,7 @@ const process = require('node:process');
 const { loadConfig } = require('./config');
 const { CloudflareApiError, CloudflareClient } = require('./cloudflare');
 const { createLogger } = require('./logger');
-const { detectWanIp } = require('./wan-ip');
+const { detectWanIp, detectWanIpv6 } = require('./wan-ip');
 const { buildPatch, classifyRecords, needsUpdate } = require('./record-policy');
 
 function parseArgs(argv) {
@@ -57,7 +57,7 @@ function summarizeCloudflareError(error) {
   return { message: error.message };
 }
 
-async function processRecord({ cloudflare, zoneId, recordConfig, wanIp, dryRun, logger }) {
+async function processRecord({ cloudflare, zoneId, recordConfig, desiredContent, dryRun, logger }) {
   const label = `${recordConfig.name} ${recordConfig.type}`;
   logger.info(`Processing ${label} proxied=${recordConfig.proxied}`);
 
@@ -68,7 +68,7 @@ async function processRecord({ cloudflare, zoneId, recordConfig, wanIp, dryRun, 
     const desiredRecord = {
       type: recordConfig.type,
       name: recordConfig.name,
-      content: wanIp,
+      content: desiredContent,
       proxied: recordConfig.proxied,
       ttl: recordConfig.ttl,
     };
@@ -76,7 +76,7 @@ async function processRecord({ cloudflare, zoneId, recordConfig, wanIp, dryRun, 
     if (classification.action === 'create') {
       if (dryRun) {
         logger.info(`${label} would be created`, {
-          content: wanIp,
+          content: desiredContent,
           proxied: recordConfig.proxied,
           ttl: recordConfig.ttl || 1,
         });
@@ -85,7 +85,7 @@ async function processRecord({ cloudflare, zoneId, recordConfig, wanIp, dryRun, 
 
       await cloudflare.createRecord(zoneId, desiredRecord);
       logger.info(`${label} created`, {
-        content: wanIp,
+        content: desiredContent,
         proxied: recordConfig.proxied,
         ttl: recordConfig.ttl || 1,
       });
@@ -108,7 +108,7 @@ async function processRecord({ cloudflare, zoneId, recordConfig, wanIp, dryRun, 
 
     const existingRecord = classification.record;
     if (!needsUpdate(existingRecord, desiredRecord)) {
-      logger.info(`${label} already points to ${wanIp}; no change`);
+      logger.info(`${label} already points to ${desiredContent}; no change`);
       return { status: 'unchanged', detail: 'already-current' };
     }
 
@@ -116,7 +116,7 @@ async function processRecord({ cloudflare, zoneId, recordConfig, wanIp, dryRun, 
     if (dryRun) {
       logger.info(`${label} would be updated`, {
         from_content: existingRecord.content,
-        to_content: wanIp,
+        to_content: desiredContent,
         patch,
       });
       return { status: 'changed', detail: 'would-update' };
@@ -125,7 +125,7 @@ async function processRecord({ cloudflare, zoneId, recordConfig, wanIp, dryRun, 
     await cloudflare.patchRecord(zoneId, existingRecord.id, patch);
     logger.info(`${label} updated`, {
       from_content: existingRecord.content,
-      to_content: wanIp,
+      to_content: desiredContent,
       patch,
     });
     return { status: 'changed', detail: 'updated' };
@@ -136,8 +136,18 @@ async function processRecord({ cloudflare, zoneId, recordConfig, wanIp, dryRun, 
 }
 
 async function runPass({ config, cloudflare, logger, dryRun = false }) {
-  const wanIp = await detectWanIp(config.wan_ip, logger);
-  logger.info(`Detected WAN IP: ${wanIp}`);
+  const requiredTypes = new Set(config.records.map((record) => record.type));
+  const detected = {};
+
+  if (requiredTypes.has('A')) {
+    detected.A = await detectWanIp(config.wan_ip, logger);
+    logger.info(`Detected WAN IPv4: ${detected.A}`);
+  }
+
+  if (requiredTypes.has('AAAA')) {
+    detected.AAAA = await detectWanIpv6(config.wan_ipv6, logger);
+    logger.info(`Detected WAN IPv6: ${detected.AAAA}`);
+  }
 
   const zoneId = await cloudflare.getZoneIdByName(config.cloudflare.zone_name);
   logger.info(`Using Cloudflare zone ${config.cloudflare.zone_name}: ${zoneId}`);
@@ -154,7 +164,7 @@ async function runPass({ config, cloudflare, logger, dryRun = false }) {
       cloudflare,
       zoneId,
       recordConfig,
-      wanIp,
+      desiredContent: detected[recordConfig.type],
       dryRun,
       logger,
     });

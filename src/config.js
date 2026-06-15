@@ -144,6 +144,7 @@ function validateConfig(config) {
   assertObject(config, 'root');
   assertObject(config.cloudflare, 'cloudflare');
   assertObject(config.wan_ip, 'wan_ip');
+  if (config.wan_ipv6 !== undefined) assertObject(config.wan_ipv6, 'wan_ipv6');
   assertObject(config.conflict_policy || {}, 'conflict_policy');
   assertObject(config.logging || {}, 'logging');
 
@@ -157,6 +158,10 @@ function validateConfig(config) {
 
   if (!config.wan_ip.command && !config.wan_ip.url) {
     throw new Error('Config requires wan_ip.command or wan_ip.url');
+  }
+
+  if (config.wan_ipv6 !== undefined && !config.wan_ipv6.command && !config.wan_ipv6.url) {
+    throw new Error('Config requires wan_ipv6.command or wan_ipv6.url when wan_ipv6 is defined');
   }
 
   const interval = Number(config.wan_ip.interval_seconds || 600);
@@ -179,8 +184,8 @@ function validateConfig(config) {
     }
 
     record.type = String(record.type || 'A').toUpperCase();
-    if (record.type !== 'A') {
-      throw new Error(`Config field ${label}.type must be A in v1`);
+    if (!['A', 'AAAA'].includes(record.type)) {
+      throw new Error(`Config field ${label}.type must be A or AAAA`);
     }
 
     if (typeof record.proxied !== 'boolean') {
@@ -201,6 +206,11 @@ function validateConfig(config) {
     }
     seen.add(uniqueKey);
   });
+
+  const requiresIpv6 = config.records.some((record) => record.type === 'AAAA');
+  if (requiresIpv6 && config.wan_ipv6 === undefined) {
+    throw new Error('Config requires wan_ipv6 when any records entry uses type AAAA');
+  }
 
   config.conflict_policy = {
     non_matching_type: 'skip',

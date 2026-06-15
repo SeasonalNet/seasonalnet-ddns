@@ -2,11 +2,13 @@
 
 `seasonalnet-ddns` is the SeasonalNet Cloudflare dynamic DNS daemon.
 
-It keeps selected public `seasonalnet.org` DNS records pointed at the current SeasonalNet WAN IPv4 address. It replaces the older Bash/systemd-timer implementation with a small Node.js service that runs continuously under systemd.
+It keeps selected public `seasonalnet.org` DNS records pointed at the current SeasonalNet WAN IPv4 address and, when configured, the current SeasonalWeb origin IPv6 address. It replaces the older Bash/systemd-timer implementation with a small Node.js service that runs continuously under systemd.
 
 ## What It Manages
 
 The daemon manages only records explicitly listed in `config.yaml`.
+
+`A` records use `wan_ip`. `AAAA` records use `wan_ipv6`. The daemon queries Cloudflare by hostname first, then manages only the configured record type so paired `A`/`AAAA` records for the same hostname are safe.
 
 It is intended for public edge hostnames such as:
 
@@ -26,6 +28,10 @@ Example:
 records:
   - name: grafana.seasonalnet.org
     type: A
+    proxied: true
+
+  - name: grafana.seasonalnet.org
+    type: AAAA
     proxied: true
 
   - name: sip.seasonalnet.org
@@ -90,6 +96,8 @@ cp config.example.yaml config.yaml
 
 `config.yaml` is local-only and should not be committed.
 
+For SeasonalWeb dual-stack origin records, add paired `AAAA` entries for the proxied web hostnames after CR200A IPv6 pinholes and nginx IPv6 service checks are known-good. Do not add `AAAA` records for Mail/PBX hostnames from this SeasonalWeb daemon unless those names deliberately point at SeasonalWeb.
+
 Main settings:
 
 ```yaml
@@ -100,6 +108,9 @@ cloudflare:
 wan_ip:
   command: "curl -fsS https://api.ipify.org"
   interval_seconds: 600
+
+wan_ipv6:
+  command: "ip -6 -o addr show dev ens18 scope global | awk '!/temporary|deprecated/ { split($4,a,\"/\"); print a[1]; exit }'"
 
 conflict_policy:
   non_matching_type: skip
@@ -186,17 +197,26 @@ Scheduling DDNS passes every 600 seconds
 
 ## DNS Validation
 
-DNS-only records should resolve to the SeasonalNet WAN IPv4 address:
+DNS-only `A` records should resolve to the SeasonalNet WAN IPv4 address:
 
 ```bash
 dig @1.1.1.1 sip.seasonalnet.org A +short
 ```
 
-Cloudflare-proxied records should resolve to Cloudflare edge IPs, not the SeasonalNet WAN IP:
+Cloudflare-proxied records should resolve to Cloudflare edge IPs, not the SeasonalNet origin addresses:
 
 ```bash
 dig @1.1.1.1 grafana.seasonalnet.org A +short
+dig @1.1.1.1 grafana.seasonalnet.org AAAA +short
 dig @1.1.1.1 www.seasonalnet.org A +short
+dig @1.1.1.1 www.seasonalnet.org AAAA +short
+```
+
+To test the origin IPv6 directly while preserving the nginx Host/SNI routing:
+
+```bash
+WEB6="$(ip -6 -o addr show dev ens18 scope global | awk '!/temporary|deprecated/ { split($4,a,"/"); print a[1]; exit }')"
+curl -6 -vkI --resolve www.seasonalnet.org:443:"$WEB6" https://www.seasonalnet.org/
 ```
 
 ## Legacy Service
