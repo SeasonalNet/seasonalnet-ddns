@@ -25,6 +25,11 @@ jobs:
           else
             echo "No package manifest found."
           fi
+      - name: Prepare example config
+        run: |
+          if [ ! -f config.yaml ] && [ -f config.example.yaml ]; then
+            cp config.example.yaml config.yaml
+          fi
       - name: Run package checks
         run: |
           node <<'NODE'
