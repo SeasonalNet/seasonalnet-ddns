@@ -137,3 +137,95 @@ logging:
 
   assert.throws(() => validateConfig(config), /must be A or AAAA/);
 });
+
+test('accepts an AAAA-only instance without wan_ip', () => {
+  const config = parseSimpleYaml(`
+cloudflare:
+  zone_name: seasonalnet.org
+  api_token_env: CF_API_TOKEN
+wan_ipv6:
+  command: "ip -6 -o addr show dev ens18 scope global"
+  interval_seconds: 300
+records:
+  - name: mail.seasonalnet.org
+    type: AAAA
+    proxied: false
+conflict_policy:
+  incompatible_records: skip
+  multiple_records: fail-record
+logging:
+  level: info
+`);
+
+  const validated = validateConfig(config);
+  assert.equal(validated.wan_ip, undefined);
+  assert.equal(validated.interval_seconds, 300);
+  assert.equal(validated.records[0].type, 'AAAA');
+});
+
+test('requires wan_ip only when A records are configured', () => {
+  const config = parseSimpleYaml(`
+cloudflare:
+  zone_name: seasonalnet.org
+  api_token_env: CF_API_TOKEN
+wan_ipv6:
+  command: "ip -6 -o addr show dev ens18 scope global"
+records:
+  - name: mail.seasonalnet.org
+    type: A
+    proxied: false
+conflict_policy:
+  incompatible_records: skip
+  multiple_records: fail-record
+logging:
+  level: info
+`);
+
+  assert.throws(() => validateConfig(config), /requires wan_ip/);
+});
+
+test('accepts a top-level update interval', () => {
+  const config = parseSimpleYaml(`
+cloudflare:
+  zone_name: seasonalnet.org
+  api_token_env: CF_API_TOKEN
+interval_seconds: 120
+wan_ip:
+  command: "curl -fsS https://api.ipify.org"
+records:
+  - name: vpn.seasonalnet.org
+    type: A
+    proxied: false
+conflict_policy:
+  incompatible_records: skip
+  multiple_records: fail-record
+logging:
+  level: info
+`);
+
+  const validated = validateConfig(config);
+  assert.equal(validated.interval_seconds, 120);
+});
+
+test('rejects conflicting interval settings', () => {
+  const config = parseSimpleYaml(`
+cloudflare:
+  zone_name: seasonalnet.org
+  api_token_env: CF_API_TOKEN
+interval_seconds: 120
+wan_ipv6:
+  command: "ip -6 -o addr show dev ens18 scope global"
+  interval_seconds: 300
+records:
+  - name: vpn.seasonalnet.org
+    type: AAAA
+    proxied: false
+conflict_policy:
+  incompatible_records: skip
+  multiple_records: fail-record
+logging:
+  level: info
+`);
+
+  assert.throws(() => validateConfig(config), /must match/);
+});

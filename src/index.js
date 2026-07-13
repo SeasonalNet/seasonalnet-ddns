@@ -74,6 +74,12 @@ async function processRecord({ cloudflare, zoneId, recordConfig, desiredContent,
     };
 
     if (classification.action === 'create') {
+      if (classification.otherType.length > 0) {
+        logger.info(`${label} is missing; compatible records with the same hostname will be preserved`, {
+          existing_types: classification.otherType.map((record) => record.type),
+        });
+      }
+
       if (dryRun) {
         logger.info(`${label} would be created`, {
           content: desiredContent,
@@ -93,10 +99,10 @@ async function processRecord({ cloudflare, zoneId, recordConfig, desiredContent,
     }
 
     if (classification.action === 'skip') {
-      logger.warn(`${label} skipped because hostname exists as another type`, {
-        existing_types: classification.otherType.map((record) => record.type),
+      logger.warn(`${label} skipped because a blocking DNS record type exists`, {
+        blocking_types: classification.blockingType.map((record) => record.type),
       });
-      return { status: 'skipped', detail: 'non-matching-type-exists' };
+      return { status: 'skipped', detail: 'blocking-type-exists' };
     }
 
     if (classification.action === 'fail') {
@@ -225,8 +231,8 @@ async function main() {
 
   if (args.once) return;
 
-  const intervalMs = config.wan_ip.interval_seconds * 1000;
-  logger.info(`Scheduling DDNS passes every ${config.wan_ip.interval_seconds} seconds`);
+  const intervalMs = config.interval_seconds * 1000;
+  logger.info(`Scheduling DDNS passes every ${config.interval_seconds} seconds`);
 
   let running = false;
   const timer = setInterval(async () => {

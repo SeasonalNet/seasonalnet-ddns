@@ -2,101 +2,58 @@
 
 `seasonalnet-ddns` is the SeasonalNet Cloudflare dynamic DNS daemon.
 
-It keeps selected public `seasonalnet.org` DNS records pointed at the current SeasonalNet WAN IPv4 address and, when configured, the current SeasonalWeb origin IPv6 address. It replaces the older Bash/systemd-timer implementation with a small Node.js service that runs continuously under systemd.
+It keeps explicitly configured Cloudflare `A` and `AAAA` records synchronized with the address sources available on the machine running the daemon. It can run continuously under systemd or as a hardened Docker container.
 
-## What It Manages
+## Record Model
 
-The daemon manages only records explicitly listed in `config.yaml`.
+The daemon manages only hostname/type pairs explicitly listed in `config.yaml`.
 
-`A` records use `wan_ip`. `AAAA` records use `wan_ipv6`. The daemon queries Cloudflare by hostname first, then manages only the configured record type so paired `A`/`AAAA` records for the same hostname are safe.
+- `A` records use `wan_ip`.
+- `AAAA` records use `wan_ipv6`.
+- Each record independently declares its Cloudflare proxied/DNS-only policy.
+- Multiple daemon instances may manage different hostname/type pairs in the same Cloudflare zone.
 
-It is intended for public edge hostnames such as:
+`A` and `AAAA` are treated as independent RRsets. If `mail.seasonalnet.org` already has an `A` record but no `AAAA`, an explicitly configured `AAAA` entry is created without modifying the `A` record. Compatible records such as `MX`, `TXT`, and `HTTPS` are also preserved.
 
-- `www.seasonalnet.org`
-- `docs.seasonalnet.org`
-- `auth.seasonalnet.org`
-- `git.seasonalnet.org`
-- `grafana.seasonalnet.org`
-- `pbx.seasonalnet.org`
-- `sip.seasonalnet.org`
-
-Each record declares whether it should be Cloudflare-proxied or DNS-only.
+A blocking `CNAME` at the same hostname prevents `A` or `AAAA` creation. Multiple existing records with the same hostname and desired type fail that record instead of choosing one arbitrarily.
 
 Example:
 
 ```yaml
 records:
-  - name: grafana.seasonalnet.org
+  - name: mail.seasonalnet.org
     type: A
-    proxied: true
+    proxied: false
 
-  - name: grafana.seasonalnet.org
+  - name: mail.seasonalnet.org
     type: AAAA
-    proxied: true
-
-  - name: sip.seasonalnet.org
-    type: A
     proxied: false
 ```
 
-## What It Does Not Manage
+## Multi-Instance Deployment
 
-The daemon does not discover records automatically.
+SeasonalNet has one shared NATed public IPv4 address but distinct global IPv6 addresses on public-facing VMs. The clean ownership model is:
 
-It does not manage mail/autodiscovery names unless they are deliberately added to `config.yaml`.
+| Instance | Record ownership |
+|---|---|
+| SeasonalWeb | Shared `A` records and `AAAA` records for services that terminate on SeasonalWeb |
+| SeasonalMail | `AAAA` records for mail services terminating directly on SeasonalMail |
+| SeasonalPBX | `AAAA` records for direct SIP/voice hostnames such as `sip.seasonalnet.org` |
+| SeasonalVPN | `AAAA` records for VPN hostnames terminating directly on SeasonalVPN |
 
-Leave these out unless their DNS behavior is reviewed first:
+A hostname/type pair must have exactly one owning instance. For example, SeasonalWeb may continue managing `mail.seasonalnet.org A`, while the SeasonalMail instance manages only `mail.seasonalnet.org AAAA`.
 
-- `mail.seasonalnet.org`
-- `autoconfig.seasonalnet.org`
-- `autodiscover.seasonalnet.org`
-
-These records may need DNS-only, CNAME, MX, or service-specific treatment.
-
-## Runtime Location
-
-Current SeasonalWeb deployment path:
-
-```text
-/opt/seasonalnet/seasonalnet-ddns
-```
-
-systemd unit:
-
-```text
-/etc/systemd/system/seasonal-cf-ddns-node.service
-```
-
-Cloudflare token environment file:
-
-```text
-/etc/seasonal/cf-ddns.env
-```
-
-Expected token variable:
-
-```env
-CF_API_TOKEN=replace-with-real-token
-```
-
-The token file should be readable by root and the service group only:
-
-```bash
-chown root:cfddns /etc/seasonal/cf-ddns.env
-chmod 0640 /etc/seasonal/cf-ddns.env
-```
+This avoids multiple daemons racing over the same record. Each instance discovers its own stable global IPv6 address locally.
 
 ## Configuration
 
-Copy the example config before first use:
+Copy the example configuration:
 
 ```bash
 cp config.example.yaml config.yaml
 ```
 
-`config.yaml` is local-only and should not be committed.
-
-For SeasonalWeb dual-stack origin records, add paired `AAAA` entries for the proxied web hostnames after CR200A IPv6 pinholes and nginx IPv6 service checks are known-good. Do not add `AAAA` records for Mail/PBX hostnames from this SeasonalWeb daemon unless those names deliberately point at SeasonalWeb.
+`config.yaml` is local runtime state and must not be committed.
 
 Main settings:
 
@@ -105,24 +62,89 @@ cloudflare:
   zone_name: seasonalnet.org
   api_token_env: CF_API_TOKEN
 
+interval_seconds: 600
+
 wan_ip:
   command: "curl -fsS https://api.ipify.org"
-  interval_seconds: 600
 
 wan_ipv6:
   command: "ip -6 -o addr show dev ens18 scope global | awk '!/temporary|deprecated/ { split($4,a,\"/\"); print a[1]; exit }'"
 
 conflict_policy:
-  non_matching_type: skip
+  incompatible_records: skip
   multiple_records: fail-record
 
 logging:
   level: info
 ```
 
+`interval_seconds` defaults to 600 and must be at least 30. Legacy `wan_ip.interval_seconds` configurations remain accepted. Source-specific interval values must match when more than one is present.
+
+Only configure the address source required by that instance.
+
+### A-only central instance
+
+The central shared-IPv4 instance can omit `wan_ipv6` when it manages only `A` records:
+
+```yaml
+cloudflare:
+  zone_name: seasonalnet.org
+  api_token_env: CF_API_TOKEN
+
+interval_seconds: 600
+
+wan_ip:
+  command: "curl -fsS https://api.ipify.org"
+
+records:
+  - name: mail.seasonalnet.org
+    type: A
+    proxied: false
+
+  - name: sip.seasonalnet.org
+    type: A
+    proxied: false
+
+  - name: vpn.seasonalnet.org
+    type: A
+    proxied: false
+
+conflict_policy:
+  incompatible_records: skip
+  multiple_records: fail-record
+
+logging:
+  level: info
+```
+
+## Cloudflare Token
+
+The default environment file is:
+
+```text
+/etc/seasonal/cf-ddns.env
+```
+
+Expected contents:
+
+```env
+CF_API_TOKEN=replace-with-real-token
+```
+
+Use a token limited to the required zone and DNS-edit operation. Separate tokens per VM simplify revocation and incident containment.
+
+For systemd operation:
+
+```bash
+chown root:cfddns /etc/seasonal/cf-ddns.env
+chmod 0640 /etc/seasonal/cf-ddns.env
+```
+
+For Docker-only operation, root-owned mode `0600` is sufficient because the Docker daemon reads the environment file before creating the container.
+
 ## Commands
 
-Check config:
+Check the configuration:
 
 ```bash
 npm run check-config
@@ -140,7 +162,6 @@ Run a dry-run pass:
 set -a
 . /etc/seasonal/cf-ddns.env
 set +a
-
 npm run dry-run
 ```
 
@@ -150,74 +171,159 @@ Run one live pass:
 set -a
 . /etc/seasonal/cf-ddns.env
 set +a
-
 npm run once
 ```
 
-The manual `set -a` step is needed because direct shell runs do not automatically load the systemd `EnvironmentFile`.
+## Docker Operation
+
+The supplied Compose service uses host networking so the default IPv6 command sees the actual VM interface named `ens18`. A bridge-networked container would inspect its own network namespace and could publish the wrong IPv6 address or no address.
+
+The same Compose definition is deployed independently on each service VM. Because `network_mode: host` is local to that VM, the SeasonalMail instance sees SeasonalMail interfaces, the SeasonalPBX instance sees SeasonalPBX interfaces, and so on.
+
+The image:
+
+- Uses Node.js 22 on Debian Bookworm slim.
+- Includes `curl`, `iproute2`, and `awk` for the example address commands.
+- Runs as the non-root `node` user.
+- Uses a read-only root filesystem.
+- Drops all Linux capabilities.
+- Enables `no-new-privileges`.
+
+### Build and validate
+
+```bash
+docker compose build
+
+docker compose run --rm seasonalnet-ddns \
+  --config /config/config.yaml \
+  --check-config
+
+docker compose run --rm seasonalnet-ddns \
+  --config /config/config.yaml \
+  --dry-run
+```
+
+Before a live update, verify the container sees the VM's intended address:
+
+```bash
+docker compose run --rm --entrypoint /bin/sh seasonalnet-ddns -c \
+  'ip -6 -o addr show dev ens18 scope global'
+```
+
+Run one live pass:
+
+```bash
+docker compose run --rm seasonalnet-ddns \
+  --config /config/config.yaml \
+  --once
+```
+
+Start the long-running instance:
+
+```bash
+docker compose up -d
+```
+
+Check state and logs:
+
+```bash
+docker compose ps
+docker compose logs --tail=100 seasonalnet-ddns
+```
+
+Update the local image after pulling code:
+
+```bash
+docker compose up -d --build
+```
+
+Do not run a systemd and Docker instance that own the same hostname/type pairs concurrently.
 
 ## systemd Operation
 
-Start the daemon:
+Default repository deployment path:
 
-```bash
-systemctl start seasonal-cf-ddns-node.service
+```text
+/opt/seasonalnet/seasonalnet-ddns
 ```
 
-Enable it at boot:
+Install the supplied unit as:
 
-```bash
-systemctl enable seasonal-cf-ddns-node.service
+```text
+/etc/systemd/system/seasonal-cf-ddns-node.service
 ```
 
-Check status:
+Then:
 
 ```bash
+systemctl daemon-reload
+systemctl enable --now seasonal-cf-ddns-node.service
 systemctl status seasonal-cf-ddns-node.service --no-pager
-```
-
-View logs:
-
-```bash
 journalctl -u seasonal-cf-ddns-node.service -n 100 --no-pager
 ```
 
-The daemon runs one DDNS pass at startup, then repeats based on `wan_ip.interval_seconds`.
+The daemon performs one pass at startup and repeats every `interval_seconds`.
 
 ## Expected Healthy Output
 
-A healthy pass should end with a summary similar to:
-
 ```text
-DDNS pass complete: changed=0 unchanged=13 skipped=0 failed=0
+DDNS pass complete: changed=0 unchanged=1 skipped=0 failed=0
 Scheduling DDNS passes every 600 seconds
 ```
 
-`changed` may be nonzero when the WAN IP changes or when Cloudflare record settings are corrected.
+A first pass may report `changed=1` when it creates the missing `AAAA` record beside an existing `A` record.
 
 ## DNS Validation
 
-DNS-only `A` records should resolve to the SeasonalNet WAN IPv4 address:
+DNS-only records should expose the actual SeasonalNet addresses:
 
 ```bash
+dig @1.1.1.1 mail.seasonalnet.org A +short
+dig @1.1.1.1 mail.seasonalnet.org AAAA +short
+
 dig @1.1.1.1 sip.seasonalnet.org A +short
+dig @1.1.1.1 sip.seasonalnet.org AAAA +short
+
+dig @1.1.1.1 vpn.seasonalnet.org A +short
+dig @1.1.1.1 vpn.seasonalnet.org AAAA +short
 ```
 
-Cloudflare-proxied records should resolve to Cloudflare edge IPs, not the SeasonalNet origin addresses:
+Cloudflare-proxied web records should resolve to Cloudflare edge addresses rather than origin addresses.
+
+## Troubleshooting
+
+### Missing record is not created
+
+The daemon creates a missing `A` or `AAAA` when compatible record types already exist. It skips creation only when a blocking type such as `CNAME` exists at that exact hostname.
+
+Example log:
+
+```text
+mail.seasonalnet.org AAAA skipped because a blocking DNS record type exists
+```
+
+Review the hostname in Cloudflare and decide whether the alias or the address record is authoritative.
+
+### Duplicate same-type records
+
+If multiple records exist with the same hostname and desired type, the daemon fails that item instead of selecting one:
+
+```text
+mail.seasonalnet.org AAAA failed because multiple matching records exist
+```
+
+Remove the unintended duplicate and rerun the dry-run.
+
+### Container sees no global IPv6 address
+
+Confirm host networking is active and the interface name is correct:
 
 ```bash
-dig @1.1.1.1 grafana.seasonalnet.org A +short
-dig @1.1.1.1 grafana.seasonalnet.org AAAA +short
-dig @1.1.1.1 www.seasonalnet.org A +short
-dig @1.1.1.1 www.seasonalnet.org AAAA +short
+docker inspect seasonalnet-ddns --format '{{.HostConfig.NetworkMode}}'
+ip -6 -o addr show dev ens18 scope global
 ```
 
-To test the origin IPv6 directly while preserving the nginx Host/SNI routing:
-
-```bash
-WEB6="$(ip -6 -o addr show dev ens18 scope global | awk '!/temporary|deprecated/ { split($4,a,"/"); print a[1]; exit }')"
-curl -6 -vkI --resolve www.seasonalnet.org:443:"$WEB6" https://www.seasonalnet.org/
-```
+The expected network mode is `host`. Update `wan_ipv6.command` if the VM uses a different interface name.
 
 ## Legacy Service
 
@@ -229,56 +335,11 @@ seasonal-cf-ddns.service
 /usr/local/sbin/seasonal-cf-ddns.sh
 ```
 
-After the Node daemon is proven healthy:
+Disable the legacy timer after the Node or Docker daemon is proven healthy:
 
 ```bash
 systemctl disable --now seasonal-cf-ddns.timer
 systemctl reset-failed seasonal-cf-ddns.service
-systemctl enable --now seasonal-cf-ddns-node.service
-```
-
-The old Bash script can be kept temporarily as a rollback artifact, but it should not be timer-driven once the Node daemon is active.
-
-## Troubleshooting
-
-### Missing Cloudflare token during manual run
-
-If this appears:
-
-```text
-Cloudflare API token environment variable is missing: CF_API_TOKEN
-```
-
-Load the env file first:
-
-```bash
-set -a
-. /etc/seasonal/cf-ddns.env
-set +a
-```
-
-Then rerun the command.
-
-### Record skipped because another type exists
-
-Example:
-
-```text
-hostname skipped because hostname exists as another type
-```
-
-This means the hostname exists in Cloudflare, but not as the expected record type.
-
-For v1, the daemon skips instead of guessing. Review the Cloudflare record manually before adding or changing it.
-
-### Duplicate records
-
-If multiple records exist with the same name and expected type, the daemon fails that record instead of choosing one.
-
-Fix the duplicate in Cloudflare, then rerun:
-
-```bash
-npm run dry-run
 ```
 
 ## Repository Notes

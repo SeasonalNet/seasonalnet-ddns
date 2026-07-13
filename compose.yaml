@@ -1,0 +1,21 @@
+services:
+  seasonalnet-ddns:
+    build:
+      context: .
+    image: seasonalnet-ddns:local
+    container_name: seasonalnet-ddns
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    env_file:
+      - /etc/seasonal/cf-ddns.env
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64

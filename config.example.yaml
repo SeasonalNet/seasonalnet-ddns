@@ -2,12 +2,13 @@ cloudflare:
   zone_name: seasonalnet.org
   api_token_env: CF_API_TOKEN
 
+interval_seconds: 600
+
 wan_ip:
   command: "curl -fsS https://api.ipify.org"
-  interval_seconds: 600
 
 wan_ipv6:
-  # SeasonalWeb origin IPv6. The command must print exactly one global IPv6 address.
+  # Local service VM IPv6. The command must print exactly one stable global IPv6 address.
   command: "ip -6 -o addr show dev ens18 scope global | awk '!/temporary|deprecated/ { split($4,a,\"/\"); print a[1]; exit }'"
 
 records:
@@ -120,7 +121,7 @@ records:
     proxied: false
 
 conflict_policy:
-  non_matching_type: skip
+  incompatible_records: skip
   multiple_records: fail-record
 
 logging:

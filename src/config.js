@@ -140,10 +140,18 @@ function assertObject(value, name) {
   }
 }
 
+function validateInterval(value, label) {
+  const interval = Number(value);
+  if (!Number.isInteger(interval) || interval < 30) {
+    throw new Error(`Config field ${label} must be an integer >= 30`);
+  }
+  return interval;
+}
+
 function validateConfig(config) {
   assertObject(config, 'root');
   assertObject(config.cloudflare, 'cloudflare');
-  assertObject(config.wan_ip, 'wan_ip');
+  if (config.wan_ip !== undefined) assertObject(config.wan_ip, 'wan_ip');
   if (config.wan_ipv6 !== undefined) assertObject(config.wan_ipv6, 'wan_ipv6');
   assertObject(config.conflict_policy || {}, 'conflict_policy');
   assertObject(config.logging || {}, 'logging');
@@ -155,20 +163,6 @@ function validateConfig(config) {
   if (!config.cloudflare.api_token_env || typeof config.cloudflare.api_token_env !== 'string') {
     throw new Error('Config field cloudflare.api_token_env is required');
   }
-
-  if (!config.wan_ip.command && !config.wan_ip.url) {
-    throw new Error('Config requires wan_ip.command or wan_ip.url');
-  }
-
-  if (config.wan_ipv6 !== undefined && !config.wan_ipv6.command && !config.wan_ipv6.url) {
-    throw new Error('Config requires wan_ipv6.command or wan_ipv6.url when wan_ipv6 is defined');
-  }
-
-  const interval = Number(config.wan_ip.interval_seconds || 600);
-  if (!Number.isInteger(interval) || interval < 30) {
-    throw new Error('Config field wan_ip.interval_seconds must be an integer >= 30');
-  }
-  config.wan_ip.interval_seconds = interval;
 
   if (!Array.isArray(config.records) || config.records.length === 0) {
     throw new Error('Config requires at least one records entry');
@@ -207,24 +201,64 @@ function validateConfig(config) {
     seen.add(uniqueKey);
   });
 
+  const requiresIpv4 = config.records.some((record) => record.type === 'A');
   const requiresIpv6 = config.records.some((record) => record.type === 'AAAA');
+
+  if (requiresIpv4 && config.wan_ip === undefined) {
+    throw new Error('Config requires wan_ip when any records entry uses type A');
+  }
+
   if (requiresIpv6 && config.wan_ipv6 === undefined) {
     throw new Error('Config requires wan_ipv6 when any records entry uses type AAAA');
   }
 
+  if (config.wan_ip !== undefined && !config.wan_ip.command && !config.wan_ip.url) {
+    throw new Error('Config requires wan_ip.command or wan_ip.url when wan_ip is defined');
+  }
+
+  if (config.wan_ipv6 !== undefined && !config.wan_ipv6.command && !config.wan_ipv6.url) {
+    throw new Error('Config requires wan_ipv6.command or wan_ipv6.url when wan_ipv6 is defined');
+  }
+
+  const intervalCandidates = [];
+  if (config.interval_seconds !== undefined) {
+    intervalCandidates.push({ label: 'interval_seconds', value: config.interval_seconds });
+  }
+  if (config.wan_ip && config.wan_ip.interval_seconds !== undefined) {
+    intervalCandidates.push({ label: 'wan_ip.interval_seconds', value: config.wan_ip.interval_seconds });
+  }
+  if (config.wan_ipv6 && config.wan_ipv6.interval_seconds !== undefined) {
+    intervalCandidates.push({ label: 'wan_ipv6.interval_seconds', value: config.wan_ipv6.interval_seconds });
+  }
+
+  const validatedIntervals = intervalCandidates.map((candidate) => ({
+    label: candidate.label,
+    value: validateInterval(candidate.value, candidate.label),
+  }));
+  const distinctIntervals = new Set(validatedIntervals.map((candidate) => candidate.value));
+  if (distinctIntervals.size > 1) {
+    throw new Error('Configured interval_seconds values must match');
+  }
+
+  config.interval_seconds = validatedIntervals[0]?.value || 600;
+
+  const policy = config.conflict_policy || {};
+  if (policy.non_matching_type !== undefined && policy.non_matching_type !== 'skip') {
+    throw new Error('Only legacy conflict_policy.non_matching_type=skip is supported');
+  }
+
+  if (policy.incompatible_records !== undefined && policy.incompatible_records !== 'skip') {
+    throw new Error('Only conflict_policy.incompatible_records=skip is supported');
+  }
+
+  if (policy.multiple_records !== undefined && policy.multiple_records !== 'fail-record') {
+    throw new Error('Only conflict_policy.multiple_records=fail-record is supported');
+  }
+
   config.conflict_policy = {
-    non_matching_type: 'skip',
+    incompatible_records: 'skip',
     multiple_records: 'fail-record',
-    ...(config.conflict_policy || {}),
   };
-
-  if (config.conflict_policy.non_matching_type !== 'skip') {
-    throw new Error('Only conflict_policy.non_matching_type=skip is supported in v1');
-  }
-
-  if (config.conflict_policy.multiple_records !== 'fail-record') {
-    throw new Error('Only conflict_policy.multiple_records=fail-record is supported in v1');
-  }
 
   config.logging = {
     level: 'info',

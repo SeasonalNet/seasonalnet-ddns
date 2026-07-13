@@ -7,12 +7,45 @@ const { buildPatch, classifyRecords, needsUpdate } = require('../src/record-poli
 test('classifies missing records as create', () => {
   const result = classifyRecords([], 'A');
   assert.equal(result.action, 'create');
+  assert.equal(result.reason, 'no-records-with-name');
 });
 
-test('classifies non-matching type as skip', () => {
-  const result = classifyRecords([{ type: 'CNAME', name: 'grafana.seasonalnet.org' }], 'A');
+test('creates missing AAAA alongside an existing A record', () => {
+  const result = classifyRecords([
+    { id: '4', type: 'A', content: '203.0.113.10' },
+  ], 'AAAA');
+
+  assert.equal(result.action, 'create');
+  assert.equal(result.reason, 'missing-expected-type');
+});
+
+test('creates missing A alongside an existing AAAA record', () => {
+  const result = classifyRecords([
+    { id: '6', type: 'AAAA', content: '2001:db8::10' },
+  ], 'A');
+
+  assert.equal(result.action, 'create');
+  assert.equal(result.reason, 'missing-expected-type');
+});
+
+test('creates address records alongside compatible MX and TXT records', () => {
+  const result = classifyRecords([
+    { id: 'mx', type: 'MX', content: 'mail.seasonalnet.org' },
+    { id: 'txt', type: 'TXT', content: 'v=spf1 -all' },
+  ], 'AAAA');
+
+  assert.equal(result.action, 'create');
+  assert.deepEqual(result.otherType.map((record) => record.type), ['MX', 'TXT']);
+});
+
+test('skips creation when a CNAME blocks address records at the hostname', () => {
+  const result = classifyRecords([
+    { id: 'cname', type: 'CNAME', name: 'grafana.seasonalnet.org' },
+  ], 'A');
+
   assert.equal(result.action, 'skip');
-  assert.equal(result.reason, 'non-matching-type-exists');
+  assert.equal(result.reason, 'blocking-type-exists');
+  assert.deepEqual(result.blockingType.map((record) => record.type), ['CNAME']);
 });
 
 test('classifies duplicate expected type as fail', () => {

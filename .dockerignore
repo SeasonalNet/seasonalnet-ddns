@@ -1,0 +1,15 @@
+.git
+.forgejo
+.gitignore
+.gitleaks.toml
+AGENTS.md
+README.md
+config.yaml
+.env
+node_modules
+coverage
+test
+systemd
+*.log
+*.tar
+*.tar.gz
