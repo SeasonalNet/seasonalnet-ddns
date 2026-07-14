@@ -122,7 +122,7 @@ logging:
 The default environment file is:
 
 ```text
-/etc/seasonal/cf-ddns.env
+/etc/sn-ddns/ddns.env
 ```
 
 Expected contents:
@@ -136,8 +136,8 @@ Use a token limited to the required zone and DNS-edit operation. Separate tokens
 For systemd operation:
 
 ```bash
-chown root:cfddns /etc/seasonal/cf-ddns.env
-chmod 0640 /etc/seasonal/cf-ddns.env
+chown root:sn-ddns /etc/sn-ddns/ddns.env
+chmod 0640 /etc/sn-ddns/ddns.env
 ```
 
 For Docker-only operation, root-owned mode `0600` is sufficient because the Docker daemon reads the environment file before creating the container.
@@ -160,7 +160,7 @@ Run a dry-run pass:
 
 ```bash
 set -a
-. /etc/seasonal/cf-ddns.env
+. /etc/sn-ddns/ddns.env
 set +a
 npm run dry-run
 ```
@@ -169,7 +169,7 @@ Run one live pass:
 
 ```bash
 set -a
-. /etc/seasonal/cf-ddns.env
+. /etc/sn-ddns/ddns.env
 set +a
 npm run once
 ```

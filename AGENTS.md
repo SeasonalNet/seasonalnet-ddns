@@ -11,7 +11,7 @@ It keeps explicitly listed Cloudflare `A` and `AAAA` records pointed at the conf
 - Keep the daemon small and boring.
 - Do not add a web UI, database, dashboard, provider abstraction, or automatic service discovery without an explicit plan update.
 - Treat `config.example.yaml` as the version-controlled example and `config.yaml` as local-only runtime state.
-- Never commit Cloudflare API tokens or `/etc/seasonal/cf-ddns.env` contents.
+- Never commit Cloudflare API tokens or `/etc/sn-ddns/ddns.env` contents.
 - Query Cloudflare records by hostname first, then classify by type.
 - Treat `A` and `AAAA` as independent RRsets: create a missing address type while preserving compatible records at the same hostname.
 - Never create `A` or `AAAA` beside a blocking `CNAME`; skip the configured record and report the conflict.

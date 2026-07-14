@@ -6,7 +6,7 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/seasonalnet/seasonalnet-ddns
-EnvironmentFile=/etc/seasonal/cf-ddns.env
+EnvironmentFile=/etc/sn-ddns/ddns.env
 ExecStart=/usr/bin/node src/index.js
 Restart=always
 RestartSec=15
