@@ -136,7 +136,7 @@ Use a token limited to the required zone and DNS-edit operation. Separate tokens
 For systemd operation:
 
 ```bash
-chown root:sn-ddns /etc/sn-ddns/ddns.env
+chown root:snddns /etc/sn-ddns/ddns.env
 chmod 0640 /etc/sn-ddns/ddns.env
 ```
 

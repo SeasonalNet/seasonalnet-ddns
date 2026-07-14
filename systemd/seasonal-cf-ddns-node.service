@@ -10,8 +10,8 @@ EnvironmentFile=/etc/sn-ddns/ddns.env
 ExecStart=/usr/bin/node src/index.js
 Restart=always
 RestartSec=15
-User=cfddns
-Group=cfddns
+User=snddns
+Group=snddns
 
 NoNewPrivileges=true
 PrivateTmp=true
