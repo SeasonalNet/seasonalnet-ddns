@@ -344,6 +344,6 @@ systemctl reset-failed seasonal-cf-ddns.service
 
 ## Repository Notes
 
-`AGENTS.md` contains machine/agent contributor instructions.
+[AGENTS.md](./AGENTS.md) contains machine/agent contributor instructions.
 
-`README.md` is for human operators running and maintaining the service.
+[README.md](./README.md) is for human operators running and maintaining the service.
