@@ -17,9 +17,10 @@ WORKDIR /app
 RUN mkdir -p /config \
     && chown node:node /config
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts \
-    && npm cache clean --force
+COPY package.json pnpm-lock.yaml ./
+
+RUN corepack enable \
+    && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 COPY --chown=node:node src ./src
 

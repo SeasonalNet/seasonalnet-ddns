@@ -147,7 +147,7 @@ For Docker-only operation, root-owned mode `0600` is sufficient because the Dock
 Check the configuration:
 
 ```bash
-npm run check-config
+pnpm check-config
 ```
 
 Run tests:
@@ -162,7 +162,7 @@ Run a dry-run pass:
 set -a
 . /etc/sn-ddns/ddns.env
 set +a
-npm run dry-run
+pnpm dry-run
 ```
 
 Run one live pass:
@@ -171,7 +171,7 @@ Run one live pass:
 set -a
 . /etc/sn-ddns/ddns.env
 set +a
-npm run once
+pnpm once
 ```
 
 ## Docker Operation

@@ -28,13 +28,13 @@ It keeps explicitly listed Cloudflare `A` and `AAAA` records pointed at the conf
 Before committing runtime changes, run:
 
 ```bash
-npm run check-config
+pnpm check-config
 npm test
 ```
 
 Before deployment changes, also run:
 
 ```bash
-npm run dry-run
-npm run once
+pnpm dry-run
+pnpm once
 ```
