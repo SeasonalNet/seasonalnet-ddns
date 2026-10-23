@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          node --version
+          pnpm --version
+
+      - name: Verify package metadata
+        run: |
+          node <<'NODE'
+          const pkg = require("./package.json");
+
+          if (pkg.packageManager !== "pnpm@11.17.0") {
+            throw new Error(
+              `expected packageManager pnpm@11.17.0, got ${pkg.packageManager}`
+            );
+          }
+
+          console.log("package manager:", pkg.packageManager);
+          NODE
+
+          test -f pnpm-lock.yaml
+          test ! -e package-lock.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify dependency policy
+        run: pnpm ignored-builds
+
+      - name: Prepare example config
+        run: |
+          if [ ! -f config.yaml ] && [ -f config.example.yaml ]; then
+            cp config.example.yaml config.yaml
+          fi
+
+      - name: Check configuration
+        run: pnpm check-config
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Check JavaScript syntax
+        run: |
+          find src -type f -name '*.js' -print0 |
+            xargs -0 -r -n1 node --check
+
+  security:
+    uses: ./.github/workflows/security.yml
+
+  publish-container:
+    needs: [node, security]
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Log in to GHCR
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push images
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%/*}"
+          repository="${GITHUB_REPOSITORY#*/}"
+          owner="$(printf '%s' "$owner" | tr '[:upper:]' '[:lower:]')"
+          repository="$(printf '%s' "$repository" | tr '[:upper:]' '[:lower:]')"
+          publish() {
+            local image="$1" dockerfile="$2" context="$3"
+            local tags=(--tag "$image:sha-${GITHUB_SHA:0:12}")
+            if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+              tags+=(--tag "$image:latest")
+            elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              tags+=(--tag "$image:$GITHUB_REF_NAME" --tag "$image:latest")
+            fi
+            docker buildx build --push "${tags[@]}" --file "$dockerfile" "$context"
+          }
+          publish "ghcr.io/$owner/seasonalnet-ddns" "Dockerfile" "."
