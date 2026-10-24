@@ -2,6 +2,7 @@
 'use strict';
 
 const process = require('node:process');
+const { softwareVersion } = require('./version');
 const { loadConfig } = require('./config');
 const { CloudflareApiError, CloudflareClient } = require('./cloudflare');
 const { createLogger } = require('./logger');
@@ -19,7 +20,9 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
 
-    if (arg === '--dry-run') {
+    if (arg === '--version') {
+      args.version = true;
+    } else if (arg === '--dry-run') {
       args.dryRun = true;
       args.once = true;
     } else if (arg === '--once') {
@@ -42,7 +45,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: node src/index.js [options]\n\nOptions:\n  --config <path>    Config file path. Default: config.yaml\n  --check-config     Validate config and exit.\n  --dry-run          Perform one pass without Cloudflare writes.\n  --once             Perform one live pass and exit.\n  -h, --help         Show help.\n`;
+  return `Usage: node src/index.js [options]\n\nOptions:\n  --version         Show the Git-derived software version.\n  --config <path>    Config file path. Default: config.yaml\n  --check-config     Validate config and exit.\n  --dry-run          Perform one pass without Cloudflare writes.\n  --once             Perform one live pass and exit.\n  -h, --help         Show help.\n`;
 }
 
 function summarizeCloudflareError(error) {
@@ -193,6 +196,11 @@ async function main() {
 
   if (args.help) {
     process.stdout.write(usage());
+    return;
+  }
+
+  if (args.version) {
+    process.stdout.write(`${softwareVersion()}\n`);
     return;
   }
 

@@ -182,7 +182,7 @@ The same Compose definition is deployed independently on each service VM. Becaus
 
 The image:
 
-- Uses Node.js 22 on Debian Bookworm slim.
+- Uses Node.js 24 on Debian Bookworm slim.
 - Includes `curl`, `iproute2`, and `awk` for the example address commands.
 - Runs as the non-root `node` user.
 - Uses a read-only root filesystem.
@@ -347,3 +347,7 @@ systemctl reset-failed seasonal-cf-ddns.service
 [AGENTS.md](./AGENTS.md) contains machine/agent contributor instructions.
 
 [README.md](./README.md) is for human operators running and maintaining the service.
+
+## Software versions
+
+See [VERSIONING.md](VERSIONING.md) for Git-derived versions, release tags and local builds.
