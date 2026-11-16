@@ -182,7 +182,7 @@ The same Compose definition is deployed independently on each service VM. Becaus
 
 The image:
 
-- Uses Node.js 24 on Debian Bookworm slim.
+- Uses Node.js 26 on Debian Bookworm slim.
 - Includes `curl`, `iproute2`, and `awk` for the example address commands.
 - Runs as the non-root `node` user.
 - Uses a read-only root filesystem.
